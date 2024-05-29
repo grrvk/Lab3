@@ -51,7 +51,7 @@ class KeyGen:
 class User:
     def __init__(self, name, interval=1):
         self.name = name
-        self.private_key = randint(2, 100)
+        self.private_key = randint(16, 32)
         self.public_private_shared_key = None
         self.recalculation_status = False
         self.key = None
@@ -109,19 +109,19 @@ class User:
     def recalculate_client(self):
         response = requests.get(settings.url, params={'command': "get_data", 'user': self.name})
 
-        seconds = threading.Thread(target=self.seconds, args=())
-        seconds.start()
-        seconds.join()
-
         members = response.json()['chat_users'].split()
         self.key = KeyGen(response.json()['gen'], response.json()['primary'],
                           members, members.index(self.name))
         r = requests.get(settings.url, params={'command': "upd_shared", 'user': self.name,
                                                'value': self.key.get_base_public_shared(self.private_key)})
+
         print(f"{self.name}: begin - gen {response.json()['gen']}, pr - {response.json()['primary']}, "
               f"index - {members.index(self.name)}, start_val: {self.key.get_base_public_shared(self.private_key)}")
         #print(r.text)
         for i in range(len(members) - 1):
+            seconds = threading.Thread(target=self.seconds, args=())
+            seconds.start()
+            seconds.join()
             payload = {'command': "current_shared", 'user': self.name,
                        'index': (self.key.index + i + 1) % len(members), "process": "process"}
             #print(payload)
