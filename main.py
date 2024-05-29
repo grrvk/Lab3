@@ -3,10 +3,12 @@ import time
 
 
 vika = User('vika')
-margo = User('margo')
+#margo = User('margo')
 vika.connect()
-margo.connect()
+#margo.connect()
+time.sleep(3)
 vika.send_message('hi')
+time.sleep(3)
 vika.disconnect()
 #time.sleep(4)
-margo.disconnect()
+#margo.disconnect()

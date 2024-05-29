@@ -70,10 +70,9 @@ class User:
                 recalculating.start()
                 recalculating.join()
                 self.recalculation_status = False
-            payload = {'command': "status"}
-            response = requests.get(settings.url, params=payload)
+            response = requests.get(settings.url, params={'command': "status", 'user': self.name})
             #print(f"{response.text}")
-            self.recalculation_status = bool(response.text)
+            self.recalculation_status = False if response.text == "false" else True
             print(f"{self.name}: recalc {self.recalculation_status}")
             time.sleep(self.interval_thread)
 
