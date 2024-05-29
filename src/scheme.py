@@ -3,6 +3,7 @@ from src.config import settings
 import requests
 import threading
 import time
+from datetime import datetime
 
 
 class TestThreading(object):
@@ -73,7 +74,7 @@ class User:
             response = requests.get(settings.url, params={'command': "status", 'user': self.name})
             #print(f"{response.text}")
             self.recalculation_status = False if response.text == "false" else True
-            print(f"{self.name}: recalc {self.recalculation_status}")
+            #print(f"{self.name}: recalc {self.recalculation_status}")
             time.sleep(self.interval_thread)
 
     def connect(self):
@@ -99,16 +100,26 @@ class User:
         print(response.text)
         print(f"{self.name} is thread alive message: {self.thread.is_alive()}")
 
+    def seconds(self):
+        time_count = datetime.utcnow().timestamp()
+        while time_count % 10 != 0:
+            time_count = datetime.utcnow().timestamp()
+        return time_count
+
     def recalculate_client(self):
         response = requests.get(settings.url, params={'command': "get_data", 'user': self.name})
-        #print(f"Resp: {response.json()}")
+
+        seconds = threading.Thread(target=self.seconds, args=())
+        seconds.start()
+        seconds.join()
+
         members = response.json()['chat_users'].split()
         self.key = KeyGen(response.json()['gen'], response.json()['primary'],
                           members, members.index(self.name))
         r = requests.get(settings.url, params={'command': "upd_shared", 'user': self.name,
                                                'value': self.key.get_base_public_shared(self.private_key)})
-        #print(f"{self.name}: begin - gen {response.json()['gen']}, pr - {response.json()['primary']}, "
-        #      f"index - {members.index(self.name)}, start_val: {self.key.get_base_public_shared(self.private_key)}")
+        print(f"{self.name}: begin - gen {response.json()['gen']}, pr - {response.json()['primary']}, "
+              f"index - {members.index(self.name)}, start_val: {self.key.get_base_public_shared(self.private_key)}")
         #print(r.text)
         for i in range(len(members) - 1):
             payload = {'command': "current_shared", 'user': self.name,
@@ -118,8 +129,8 @@ class User:
             requests.get(settings.url,
                          params={'command': "upd_shared", 'user': self.name,
                                  'value': self.key.get_part_public_shared(response, self.private_key)})
-            #print(f"user {self.name}: asked index - {(self.key.index + i + 1) % len(members)}, "
-            #      f"got val - {response}, sent_upd - {self.key.get_part_public_shared(response, self.private_key)}")
+            print(f"user {self.name}: asked index - {(self.key.index + i + 1) % len(members)}, "
+                  f"got val - {response}, sent_upd - {self.key.get_part_public_shared(response, self.private_key)}")
 
         payload = {'command': "current_shared", 'user': self.name,
                    'index': self.key.index, "process": "fin"}
