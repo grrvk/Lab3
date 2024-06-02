@@ -48,6 +48,14 @@ class KeyGen:
         return base ** private % self.primary
 
 
+def seconds_count():
+    time_count = datetime.utcnow().timestamp()
+    while time_count % 10 != 0:
+        time_count = int(datetime.utcnow().timestamp())
+    print(time_count)
+    return time_count
+
+
 class User:
     def __init__(self, name, interval=1):
         self.name = name
@@ -81,7 +89,7 @@ class User:
         payload = {'command': "connect", 'user': self.name}
         response = requests.get(settings.url, params=payload)
         print(f"{self.name}: {response.text}")
-        self.recalculation_status = True
+        #self.recalculation_status = True
         self.thread.start()
         time.sleep(1)
         print(f"{self.name} is thread alive connect: {self.thread.is_alive()}")
@@ -100,13 +108,13 @@ class User:
         print(response.text)
         print(f"{self.name} is thread alive message: {self.thread.is_alive()}")
 
-    def seconds(self):
-        time_count = datetime.utcnow().timestamp()
-        while time_count % 10 != 0:
-            time_count = datetime.utcnow().timestamp()
-        return time_count
+    def wait(self):
+        seconds = threading.Thread(target=seconds_count, args=())
+        seconds.start()
+        seconds.join()
 
     def recalculate_client(self):
+        self.wait()
         response = requests.get(settings.url, params={'command': "get_data", 'user': self.name})
 
         members = response.json()['chat_users'].split()
@@ -114,14 +122,12 @@ class User:
                           members, members.index(self.name))
         r = requests.get(settings.url, params={'command': "upd_shared", 'user': self.name,
                                                'value': self.key.get_base_public_shared(self.private_key)})
+        self.wait()
+        '''print(f"{self.name}: begin - gen {response.json()['gen']}, pr - {response.json()['primary']}, "
+              f"index - {members.index(self.name)}, start_val: {self.key.get_base_public_shared(self.private_key)}")'''
 
-        print(f"{self.name}: begin - gen {response.json()['gen']}, pr - {response.json()['primary']}, "
-              f"index - {members.index(self.name)}, start_val: {self.key.get_base_public_shared(self.private_key)}")
-        #print(r.text)
         for i in range(len(members) - 1):
-            seconds = threading.Thread(target=self.seconds, args=())
-            seconds.start()
-            seconds.join()
+            self.wait()
             payload = {'command': "current_shared", 'user': self.name,
                        'index': (self.key.index + i + 1) % len(members), "process": "process"}
             #print(payload)
@@ -136,5 +142,5 @@ class User:
                    'index': self.key.index, "process": "fin"}
         #print(requests.get(settings.url, params=payload).text)
         self.public_private_shared_key = int(requests.get(settings.url, params=payload).text)
-        print(f"{self.name} finished with {self.public_private_shared_key}")
+        #print(f"{self.name} finished with {self.public_private_shared_key}")
         time.sleep(1)
