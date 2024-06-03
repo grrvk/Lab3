@@ -1,2 +1,4 @@
 python-dotenv>=1.0.1
 requests>=2.32.2
+cryptography~=42.0.7
+sympy~=1.12.1
