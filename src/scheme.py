@@ -114,7 +114,10 @@ class User:
         seconds.join()
 
     def recalculate_client(self):
-        self.wait()
+        seconds = threading.Thread(target=seconds_count, args=())
+        seconds.start()
+        seconds.join()
+
         response = requests.get(settings.url, params={'command': "get_data", 'user': self.name})
 
         members = response.json()['chat_users'].split()
@@ -122,15 +125,21 @@ class User:
                           members, members.index(self.name))
         r = requests.get(settings.url, params={'command': "upd_shared", 'user': self.name,
                                                'value': self.key.get_base_public_shared(self.private_key)})
-        self.wait()
-        '''print(f"{self.name}: begin - gen {response.json()['gen']}, pr - {response.json()['primary']}, "
-              f"index - {members.index(self.name)}, start_val: {self.key.get_base_public_shared(self.private_key)}")'''
+        seconds = threading.Thread(target=seconds_count, args=())
+        seconds.start()
+        seconds.join()
 
-        for i in range(len(members) - 1):
-            self.wait()
+        print(f"{self.name}: begin - gen {response.json()['gen']}, pr - {response.json()['primary']}, "
+              f"index - {members.index(self.name)}, start_val: {self.key.get_base_public_shared(self.private_key)}")
+
+        for i in range(len(members) - 2):
+            seconds = threading.Thread(target=seconds_count, args=())
+            seconds.start()
+            seconds.join()
+
             payload = {'command': "current_shared", 'user': self.name,
                        'index': (self.key.index + i + 1) % len(members), "process": "process"}
-            #print(payload)
+            print(payload)
             response = int(requests.get(settings.url, params=payload).text)
             requests.get(settings.url,
                          params={'command': "upd_shared", 'user': self.name,
@@ -139,8 +148,9 @@ class User:
                   f"got val - {response}, sent_upd - {self.key.get_part_public_shared(response, self.private_key)}")
 
         payload = {'command': "current_shared", 'user': self.name,
-                   'index': self.key.index, "process": "fin"}
-        #print(requests.get(settings.url, params=payload).text)
-        self.public_private_shared_key = int(requests.get(settings.url, params=payload).text)
-        #print(f"{self.name} finished with {self.public_private_shared_key}")
+                   'index': (self.key.index + 1) % len(members), "process": "fin"}
+        print(requests.get(settings.url, params=payload).text)
+        number = int(requests.get(settings.url, params=payload).text)
+        self.public_private_shared_key = self.key.get_part_public_shared(number, self.private_key)
+        print(f"{self.name} finished with {self.public_private_shared_key}")
         time.sleep(1)
