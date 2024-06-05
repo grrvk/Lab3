@@ -4,6 +4,11 @@ import requests
 import threading
 import time
 from datetime import datetime
+from algo.aes import encrypt
+from algo.shrek import exit_handler
+import atexit
+
+atexit.register(exit_handler)
 
 
 class TestThreading(object):
@@ -52,7 +57,7 @@ def seconds_count():
     time_count = datetime.utcnow().timestamp()
     while time_count % 10 != 0:
         time_count = int(datetime.utcnow().timestamp())
-    print(time_count)
+    #print(time_count)
     return time_count
 
 
@@ -69,6 +74,11 @@ class User:
         self.stop_thread = False
         self.thread = threading.Thread(target=self.run, args=())
         self.thread.daemon = True
+
+        #thread messages
+        self.continue_ping = True
+        self.messages_receive = threading.Thread(target=self.receive_message, args=())
+        self.messages_receive.daemon = True
 
     def run(self):
         while True:
@@ -89,25 +99,37 @@ class User:
         payload = {'command': "connect", 'user': self.name}
         response = requests.get(settings.url, params=payload)
         print(f"{self.name}: {response.text}")
-        #self.recalculation_status = True
         self.thread.start()
+        self.messages_receive.start()
         time.sleep(1)
-        print(f"{self.name} is thread alive connect: {self.thread.is_alive()}")
+        #print(f"{self.name} is thread alive connect: {self.thread.is_alive()}")
 
     def disconnect(self):
         self.stop_thread = True
+        self.continue_ping = False
         payload = {'command': "disconnect", 'user': self.name}
         response = requests.get(settings.url, params=payload)
-        print(response.text)
+        print(f"{self.name}: {response.text}")
         time.sleep(1)
-        print(f"{self.name} is thread alive disconnect: {self.thread.is_alive()}")
+        #print(f"{self.name} is thread alive disconnect: {self.thread.is_alive()}")
 
-    def send_message(self, message):
-        payload = {'command': "send_message", 'user': self.name, 'message': message}
+    def send_message(self, message, receiver):
+        enc_message = encrypt(message, str(self.public_private_shared_key))
+        payload = {'command': "send_message", 'user': self.name, 'message': str(enc_message), 'to': receiver}
         response = requests.get(settings.url, params=payload)
-        print(response.text)
-        print(f"{self.name} is thread alive message: {self.thread.is_alive()}")
+        #print(response.text)
+        #print(f"{self.name} is thread alive message: {self.thread.is_alive()}")
+        #print(f"{self.name} is thread alive message ping: {self.messages_receive.is_alive()}")
 
+    def receive_message(self):
+        while True:
+            if not self.continue_ping:
+                break
+            response = requests.get(settings.url, params={'command': "get_messages", 'user': self.name}).json()
+            for r in response:
+                message = r['message']
+                from_user = r['user']
+                print(f"{from_user}: {message}")
     def wait(self):
         seconds = threading.Thread(target=seconds_count, args=())
         seconds.start()
@@ -129,8 +151,8 @@ class User:
         seconds.start()
         seconds.join()
 
-        print(f"{self.name}: begin - gen {response.json()['gen']}, pr - {response.json()['primary']}, "
-              f"index - {members.index(self.name)}, start_val: {self.key.get_base_public_shared(self.private_key)}")
+        '''print(f"{self.name}: begin - gen {response.json()['gen']}, pr - {response.json()['primary']}, "
+              f"index - {members.index(self.name)}, start_val: {self.key.get_base_public_shared(self.private_key)}")'''
 
         for i in range(len(members) - 2):
             seconds = threading.Thread(target=seconds_count, args=())
@@ -139,17 +161,17 @@ class User:
 
             payload = {'command': "current_shared", 'user': self.name,
                        'index': (self.key.index + i + 1) % len(members), "process": "process"}
-            print(payload)
+            #print(payload)
             response = int(requests.get(settings.url, params=payload).text)
             requests.get(settings.url,
                          params={'command': "upd_shared", 'user': self.name,
                                  'value': self.key.get_part_public_shared(response, self.private_key)})
-            print(f"user {self.name}: asked index - {(self.key.index + i + 1) % len(members)}, "
-                  f"got val - {response}, sent_upd - {self.key.get_part_public_shared(response, self.private_key)}")
+            '''print(f"user {self.name}: asked index - {(self.key.index + i + 1) % len(members)}, "
+                  f"got val - {response}, sent_upd - {self.key.get_part_public_shared(response, self.private_key)}")'''
 
         payload = {'command': "current_shared", 'user': self.name,
                    'index': (self.key.index + 1) % len(members), "process": "fin"}
-        print(requests.get(settings.url, params=payload).text)
+        #print(requests.get(settings.url, params=payload).text)
 
         number = int(requests.get(settings.url, params=payload).text)
         self.public_private_shared_key = self.key.get_part_public_shared(number, self.private_key)
