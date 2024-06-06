@@ -7,6 +7,12 @@ from datetime import datetime
 from algo.aes import encrypt
 from algo.shrek import exit_handler
 import atexit
+from algo.aes import decrypt
+import json
+import base64
+from cryptography.hazmat.primitives import hmac
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
 
 atexit.register(exit_handler)
 
@@ -25,7 +31,7 @@ class TestThreading(object):
                 break
             payload = {'command': "status"}
             response = requests.get(settings.url, params=payload)
-            print(f"{response.text}")
+            #print(f"{response.text}")
             time.sleep(self.interval)
 
 
@@ -35,7 +41,7 @@ def get_recalculation_status(stop_arg):
             break
         payload = {'command': "status"}
         response = requests.get(settings.url, params=payload)
-        print(f"{response.text}")
+        #print(f"{response.text}")
         time.sleep(1)
 
 
@@ -64,7 +70,7 @@ def seconds_count():
 class User:
     def __init__(self, name, interval=1):
         self.name = name
-        self.private_key = randint(16, 32)
+        self.private_key = randint(100, 200)
         self.public_private_shared_key = None
         self.recalculation_status = False
         self.key = None
@@ -114,28 +120,64 @@ class User:
         #print(f"{self.name} is thread alive disconnect: {self.thread.is_alive()}")
 
     def send_message(self, message, receiver):
+        print('Sending message')
         enc_message = encrypt(message, str(self.public_private_shared_key))
-        payload = {'command': "send_message", 'user': self.name, 'message': str(enc_message), 'to': receiver}
+        #print(str(self.public_private_shared_key))
+        shared_key = self.public_private_shared_key.to_bytes((self.public_private_shared_key.bit_length() + 7) // 8,
+                                                             'big')
+        #print(shared_key)
+        #print(enc_message)
+        h = hmac.HMAC(shared_key, hashes.SHA256(), backend=default_backend())
+        encrypted = base64.b64decode(enc_message)
+        h.update(encrypted)
+        mac = h.finalize()
+        message = {
+            "message": enc_message,
+            "hash": base64.b64encode(mac).decode(),
+            "sender": self.name,
+            "receiver": receiver,
+            "timestamp": datetime.now().isoformat()
+        }
+        print(message)
+        payload = {'command': "send_message", 'user': self.name, 'message': json.dumps(message), 'to': receiver}
         response = requests.get(settings.url, params=payload)
-        #print(response.text)
-        #print(f"{self.name} is thread alive message: {self.thread.is_alive()}")
-        #print(f"{self.name} is thread alive message ping: {self.messages_receive.is_alive()}")
+
+        # print(response.text)
+        # print(f"{self.name} is thread alive message: {self.thread.is_alive()}")
+        # print(f"{self.name} is thread alive message ping: {self.messages_receive.is_alive()}")
 
     def receive_message(self):
         while True:
             if not self.continue_ping:
                 break
             response = requests.get(settings.url, params={'command': "get_messages", 'user': self.name}).json()
+            if response:
+                print('Received messages')
             for r in response:
                 message = r['message']
-                from_user = r['user']
-                print(f"{from_user}: {message}")
+                #print(message)
+                # from_user = r['user']
+                data = json.loads(message)
+                encrypted = data['message']
+                mac = base64.b64decode(data['hash'])
+                shared_key = self.public_private_shared_key.to_bytes((self.public_private_shared_key.bit_length() + 7) // 8, 'big')
+                dec_message = decrypt(encrypted, str(self.public_private_shared_key))
+                encrypted = base64.b64decode(encrypted)
+
+                try:
+                    h = hmac.HMAC(shared_key, hashes.SHA256(), backend=default_backend())
+                    h.update(encrypted)
+                    h.verify(mac)
+                    print(f"From {data['sender']} at {data['timestamp']}: {dec_message}")
+                except Exception as e:
+                    raise RuntimeError(f"Verifying HMAC failed: {e}")
     def wait(self):
         seconds = threading.Thread(target=seconds_count, args=())
         seconds.start()
         seconds.join()
 
     def recalculate_client(self):
+        print('Recalculating client')
         seconds = threading.Thread(target=seconds_count, args=())
         seconds.start()
         seconds.join()
